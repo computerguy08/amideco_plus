@@ -1,1 +1,2 @@
-# amideco_plus
+# AMIDECO +
+(rewritten in C)
