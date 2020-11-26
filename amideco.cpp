@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include <assert.h>
 
-/* AMIDECO rewritten in C by computeguy08 */
+/* AMIDECO rewritten in C++ by computeguy08 */
 
 /* == CONSTANTS ===*/
 const char date[] = "1998.03.31..2003.11.24";
@@ -696,7 +696,7 @@ int main(int argc, const char* argv[])
                     unzip(&src_rom);
                     printf("\n");
                 }
-            }    /* gÅltig */
+            }    /* g¬Åltig */
         }    /* dabei */
 
 
