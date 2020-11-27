@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 #include <stdlib.h>
 #include <cstring>
 
@@ -10,7 +11,7 @@ using namespace std;
 const char date[] = "1998.03.31..2003.11.24";
 const char erw[] = ".dec";
 const int amib_longint = 67 + 77 << 8 + 73 << 16 + 66 << 24;
-const char known_block_type[64][20] =
+const string known_block_type[64] =
 { "POST",                        /* 00 */
  "Setup Server",                /* 01 */
  "Runtime",                     /* 02 */
@@ -74,7 +75,7 @@ const char known_block_type[64][20] =
  "",                            /* 3c */
  "GRFX",                        /* 3d */ /* XFRG */
  "",                            /* 3e */
- "TDSS" };                        /* 3f */ /* SSDT */
+ "TDSS" };                      /* 3f */ /* SSDT */
 
 /* == VARIABLES ===*/
 
@@ -83,9 +84,8 @@ bool new_baseaddr_required, present, mix_used = false;
 char src_rom[255], unpacked[255], src_directory[255], src_name[255], src_extension[255],
 rom[1048575], mixf0000[65535], char8[8];
 string zk, target_dir, filename;
-unsigned short int counter, target_seg, target_ofs;
 short int block_count;
-int min_loadaddress = 0x100000, filecount = 0;
+int min_loadaddress = 0x100000, filecount = 0, counter, target_seg, target_ofs;
 long int file_length, logic_start, position_amibiosc, position_l, intel_tabel_ofs, loadaddress, l, o, oj, p;
 
 /* == STRUCTURES ===*/
@@ -100,7 +100,7 @@ struct pointer_rec {
     short int ofs, seg;
 }position, * pointer_rec_z;
 
-struct {
+struct head{
     struct pointer_rec next_block;         /* 00 */
     short int packed_length;        /* 04 */
     char b6;                        /* 06 */
@@ -137,7 +137,7 @@ struct {
 
 
 struct {
-    short int w0;                 /* $FFFF */
+    short int w0;                 /* 0xFFFF */
     short int typ;
     long int source;
     long int packed_length;
@@ -167,6 +167,31 @@ char* int2hex(long int number, char n)
     }
     return result;
 }
+
+long filesize(string filename)
+{
+    struct stat stat_buf;
+    int rc = stat(filename.c_str(), &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+string copy(string str, int index, int count) {
+    char buffer[20];
+    size_t length = str.copy(buffer, count, index - 1);
+    buffer[length] = '\0';
+    return string(buffer);
+}
+
+void fsplit(string filename, char* dir, char* name, char* ext) {
+    char tmp = 0;
+    for (int i = 0; i < filename.length(); i++)
+        if (filename[i] == 0x5c)
+            tmp = i;
+    strcpy(dir, copy(filename, 1, tmp).c_str());
+    strcpy(name, copy(filename, tmp + 2, filename.length() - tmp - 5).c_str());
+    strcpy(ext,copy(filename, filename.length() - 3, 4).c_str());
+    
+}
 long int issue_address(const long int issue) {
     string solution;
     long int result, control;
@@ -180,22 +205,21 @@ long int issue_address(const long int issue) {
             control = 0;
             result = issue;
         }
-        else
-            val(solution, result, control);
+        /*else
+            val(solution, result, control);*/
 
     } while (control != 0);
     return result;
 }
 void save(char* a, long int number) {
     ofstream fout(target_dir + filename);
-    Rewrite(d2, 1);
-    BlockWrite(d2, a, number);
-    Close(d2);
+    fout.write(a, number);
+    fout.close();
 
 }
 
 void delete_srcrom() {
-    memset(src_rom, 0, $20000);
+    memset(src_rom, 0, 0x20000);
 }
 
 void unzip(void* source) {
@@ -203,11 +227,11 @@ void unzip(void* source) {
     struct start with = start_const1;
     memset(unpacked, 0xcc, with.unpacked_length);
 
-    if (unzip_lzh5(with.date, unpacked, with.unpacked_length, with.packed_length)) {
+    /*if (unzip_lzh5(with.date, unpacked, with.unpacked_length, with.packed_length)) {
         save(unpacked, with.unpacked_length);
         cout << int2hex(with.unpacked_length, 8) << "  " << filename;
     }
-    else
+    else*/
         cout << "File unpack error!";
 }
 
@@ -220,22 +244,18 @@ bool test_archive_or_amibios(head_1994_type& head)
     return false;
 }
 
-
-void blockread1l(void* puffer, long int l, int length)
+void blockread1(void* puffer, int seg, int ofs, int length)
 {
-    move(rom[l], puffer, length);
-}
-
-void blockread1(void* puffer, int seg_, int ofs_, int laenge)
-{
-    blockread1l(puffer, (long int)(seg_) << 4 + ofs_, laenge);
+    memmove(puffer, &rom[(long int)(seg) << 4 + ofs], length);
 }
 
 string block_type(char t)
 {
     string tmp = "";
-    if (set::of(range(low(known_block_type), high(known_block_type)), eos).has(t))
-        tmp = known_block_type[t];
+    for (int i = 0; i < 64; i++) {
+        if(t == i)
+            tmp = known_block_type[t];
+    }    
     if (tmp == "")
         tmp = int2hex(head.b6, 2) + '?';
     while (tmp.length() < 20)  tmp += ' ';
@@ -273,7 +293,7 @@ struct ibm_head ibm_header_const10 = { rom[oj & 0xff0000] };
 
 void try_unpack(long int o)
 {
-    blockread1l(&head_1994, o, sizeof(head_1994));
+    memmove(&head_1994,&rom[o], sizeof(head_1994));
     if (!test_archive_or_amibios(head_1994))
         return;
     cout << ":" << int2hex(o, 8) << " " << int2hex(head_1994.packed_length, 4) << " ????:????  T=??" << format("", 16) << "->";
@@ -281,7 +301,7 @@ void try_unpack(long int o)
     filename[1] = 'r';
     filename = filename + erw;
     delete_srcrom();
-    blockread1l(&src_rom, o, head_1994.packed_length);
+    memmove(&src_rom, &rom[o], head_1994.packed_length);
     unzip(&src_rom);
     cout << endl;
 }
@@ -306,10 +326,10 @@ int main(int argc, const char* argv[])
 
     fsplit(filename, src_directory, src_name, src_extension);
     open_file();
-    file_length = filesize(d1);
+    file_length = filesize(filename);
 
     if (file_length > 1 * 1024 * 1024) {
-        close(d1);
+        fin.close();
         cout << "File length is too big: " << file_length;
         exit(1);
     }
@@ -319,8 +339,8 @@ int main(int argc, const char* argv[])
     new_baseaddr_required = true;
 
     do {
-        seek(d1, 0);
-        blockread(d1, ami_flash_head, sizeof(ami_flash_head));
+        fin.seekg(0);
+        fin.read(ami_flash_head, sizeof(ami_flash_head));
         if (strcmp(ami_flash_head.signature, "FLASH") == 0)
         {
             if (new_baseaddr_required)
@@ -331,12 +351,12 @@ int main(int argc, const char* argv[])
                 new_baseaddr_required = false;
             }
 
-            seek(d1, filesize(d1) - ami_flash_head.size_of_image_chunk);
+            fin.seekg(filesize(filename) - ami_flash_head.size_of_image_chunk);
             loadaddress = issue_address(logic_start + ami_flash_head.offset_in_image);
             if (loadaddress < min_loadaddress)
                 min_loadaddress = loadaddress;
-            blockread(d1, rom[loadaddress], ami_flash_head.size_of_image_chunk);
-            close(d1);
+            fin.read(&rom[loadaddress], ami_flash_head.size_of_image_chunk);
+            fin.close();
             /*WriteLn;*/
 
             if ((strcmp(ami_flash_head.logical_area_name, "Boot Block") == 0)
@@ -358,9 +378,9 @@ int main(int argc, const char* argv[])
         else /* normal single file */
         {
             logic_start -= file_length;
-            seek(d1, 0);
-            blockread(d1, rom[logic_start], file_length);
-            close(d1);
+            fin.seekg(0);
+            fin.read(&rom[logic_start], file_length);
+            fin.close();
             cout << endl;
             flush();
         }
@@ -381,7 +401,7 @@ int main(int argc, const char* argv[])
 
 
     /*** IBM without AMIBIOSC *******************************************/
-    if ((strncmp(@rom[$fe008], "COPR. IBM 1981", strlen("COPR. IBM 1981")) == 0)
+    if ((strncmp(&rom[0xfe008], "COPR. IBM 1981", strlen("COPR. IBM 1981")) == 0)
         && (logic_start <= 0xe0000)
         && ((logic_start & 0x1ffff) == 0)
         && (ibm_header_const2.ami_ofs >= 0)
@@ -407,8 +427,8 @@ int main(int argc, const char* argv[])
                 if ((ibm_header.blocklength == 0) && (with.ami_ofs == 0) && (with.ami_seg == 0))
                     cout << "." << endl;
                 else
-                    if ((set::of('1', '2', eos).has(chr(rom[oj + long int(4)])))
-                        && (set::of('0', '9', eos).has(chr(rom[oj + long int(7)]))))
+                    if ((set::of('1', '2', eos).has((char)(rom[oj + long int(4)])))
+                        && (set::of('0', '9', eos).has((char)(rom[oj + long int(7)]))))
                         cout << copy(char8::make(rom[oj + long int(0)]), 1, 8) << endl;
                     else
                         cout << "?" << endl;
@@ -418,8 +438,8 @@ int main(int argc, const char* argv[])
                 continue;
             }
             struct ibm_header with = ibm_header_const9;
-            / p = (oj and $ffff0000) + (ami_seg - $e000) shl 4 + ami_ofs;
-            filename = int2hex(p, 8) + erw;
+            / p = (oj and 0xffff0000) + (ami_seg - 0xe000) shl 4 + ami_ofs;
+            filename = (string)int2hex(p, 8) + erw;
             cout << "--> " << int2hex(with.ami_seg, 4) << ':' << int2hex(with.ami_ofs, 4) << ',' << int2hex(blocklength, 8);
             if (with.ami_ofs > 0) {
                 cout << "  lzh5: " << int2hex(head_1994_type(rom[p]).packed_length, 8) << "->";
@@ -447,40 +467,40 @@ int main(int argc, const char* argv[])
     }
 
     /*** Intel without AMIBIOSC *****************************************/
-    intel_tabel_ofs = meml[ofs(rom[0xfe000])];
+    intel_tabel_ofs = rom[0xfe000];
 
     if ((file_length == 0) && (intel_tabel_ofs >= 0xfffe0000) && (intel_tabel_ofs < 0xffffe000)) {
         cout << " header error 3!";
         do {
-            blockread1l(&head_ami_intel, intel_tabel_ofs - 0xfff00000, sizeof(head_ami_intel));
+            memmove(&head_ami_intel, &rom[intel_tabel_ofs - 0xfff00000], sizeof(head_ami_intel));
             {
-                if ((packed_length == 0) || (packed_length == 0xffffffff))
+                if ((head_ami_intel.packed_length == 0) || (head_ami_intel.packed_length == 0xffffffff))
                     exit(0);
 
-                if (source == 0xffffffff) {
+                if (head_ami_intel.source == 0xffffffff) {
                     intel_tabel_ofs += sizeof(head_ami_intel);
                     continue;
                 }
 
-                if (unpacked_length == 0) {   /* language module at FFFe8800 */
-                    packed_length = meml[ofs(rom) + (source & 0xfffff) + 0];
-                    unpacked_length = meml[ofs(rom) + (source & 0xfffff) + 4];
-                    source += 4 + 4;
+                if (head_ami_intel.unpacked_length == 0) {   /* language module at FFFe8800 */
+                    head_ami_intel.packed_length = &rom + (head_ami_intel.source & 0xfffff);
+                    head_ami_intel.unpacked_length = &rom + (head_ami_intel.source & 0xfffff) + 4];
+                    head_ami_intel.source += 4 + 4;
                 }
 
-                cout << ':' << int2hex(source, 8) << "  " << int2hex(packed_length, 4) << "  :" <<
-                    int2hex(ziel, 8) << "  T=" << int2hex(typ, 4) << format("", 17);
-                filename = int2hex(source, 8) + erw;
+                cout << ':' << int2hex(head_ami_intel.source, 8) << "  " << int2hex(head_ami_intel.packed_length, 4) 
+                    << "  :" << int2hex(head_ami_intel.target, 8) << "  T=" << int2hex(head_ami_intel.typ, 4) << format("", 17);
+                filename = string(int2hex(head_ami_intel.source, 8)) + erw;
 
-                if (packed_length == unpacked_length) {
-                    save(&rom[source - 0xfff00000], unpacked_length);
+                if (head_ami_intel.packed_length == head_ami_intel.unpacked_length) {
+                    save(&rom[head_ami_intel.source - 0xfff00000], head_ami_intel.unpacked_length);
                     cout << int2hex(head_1994.unpacked_length, 8) << "  " << filename << endl;
                 }
                 else {
                     delete_srcrom();
-                    move(packed_length, src_rom[0], 4);
-                    move(unpacked_length, src_rom[4], 4);
-                    move(rom[source - 0xfff00000], src_rom[8], packed_length);
+                    memmove(&src_rom[0], &head_ami_intel.packed_length, 4);
+                    memmove(&src_rom[4], &head_ami_intel.unpacked_length, 4);
+                    memmove(&src_rom[8], &rom[head_ami_intel.source - 0xfff00000], head_ami_intel.packed_length);
                     unzip(&src_rom);
                     cout << endl;
                 }
@@ -493,35 +513,35 @@ int main(int argc, const char* argv[])
   /*** 1995+ with AMIBIOSC ******************************************/
     position_amibiosc = 0x100000;
     while (position_amibiosc > 0) {
-        if (strncmp(@rom[position_amibiosc - (8 + 4 + 6 + 4)], "AMIBIOSC0", strlen("AMIBIOSC0")) == 0)
+        if (strncmp(&rom[position_amibiosc - (long)22], "AMIBIOSC0", strlen("AMIBIOSC0")) == 0)
             flush();
         else
             position_amibiosc -= 0x800;
     }
 
     if (position_amibiosc > 0) {
-        zk[0] = chr(strlen("AMIBIOSC0627"));
-        blockread1l(&zk[1], position_amibiosc - long int((8 + 4 + 6 + 4)), atoi(zk[0]));
+        zk[0] = string("AMIBIOSC0627").length();
+        memmove(&zk[1], &rom[position_amibiosc - (long)22], atoi(&zk[0]));
         cout << '"' << zk << '"' << endl;
-        blockread1l(&position, position_amibiosc - long int(4), sizeof(position));
+        memmove(&position, &rom[position_amibiosc - (long)4], sizeof(position));
     }
 
     if (position_amibiosc == 0) {
         /* AMIBOOT ROM at FFFFFF40/44/50/54 */
         /* 7VRX.F1: AMIBOOT ROM at FFFFe000/04, $SIP at FFFFffd4 */
-        if ((strncmp(@rom[$Fff40], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
-            || (strncmp(@rom[$Fff44], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
-            || (strncmp(@rom[$Fff50], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
-            || (strncmp(@rom[$Fff54], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
-            || ((strncmp(@rom[$Fffd4], "$SIP", strlen("$SIP")) == 0)
-                && ((pLongint(@rom[$Fffd0]) ^ and$fff80000) == 0xfff80000))) {
+        if ((strncmp(&rom[0xFff40], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
+            || (strncmp(&rom[0xFff44], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
+            || (strncmp(&rom[0xFff50], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
+            || (strncmp(&rom[0xFff54], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
+            || ((strncmp(&rom[0xFffd4], "$SIP", strlen("$SIP")) == 0)
+                && (((int)(&rom[0xFffd0]) && 0xfff80000) == 0xfff80000))) {
 
-            position_amibiosc = sizeof(rom) - $10000 + (pLongint(@rom[$Fffa0]) ^ and$ffff);
-            if (strncmp(@rom[position_amibiosc], "AMIBIOSC", strlen("AMIBIOSC")) == 0) {
-                zk[0] = chr(strlen("AMIBIOSC0627"));
-                blockread1l(&zk[1], position_amibiosc, ord(zk[0]));
+            position_amibiosc = sizeof(rom) - 0x10000 + ((int)(&rom[0xFffa0]) && 0xffff);
+            if (strncmp(&rom[position_amibiosc], "AMIBIOSC", strlen("AMIBIOSC")) == 0) {
+                zk[0] = string("AMIBIOSC0627").length();
+                memmove(&zk[1], &rom[position_amibiosc], atoi(&zk[0]));
                 cout << '"' << zk << '"' << endl;
-                blockread1l(&position, position_amibiosc + $12, sizeof(position));
+                memmove(&position, &rom[position_amibiosc + 0x12], sizeof(position));
             }
             else
                 position_amibiosc = 0;
@@ -546,20 +566,20 @@ int main(int argc, const char* argv[])
                     exit(1);
                 }
                 cout << int2hex(packed_length, 4) <<
-                    "  " << int2hex(ziel_adresse.seg, 4) <<
-                    ':' << int2hex(ziel_adresse.ofs, 4) <<
-                    "  " << block_typ(b6);
+                    "  " << int2hex(head.dest_address.seg, 4) <<
+                    ':' << int2hex(head.dest_address.ofs, 4) <<
+                    "  " << block_type(head.b6);
 
                 delete_srcrom();
                 blockread1(&src_rom, position.seg, position.ofs, long int(sizeof(head) + packed_length));
 
-                if ((ziel_adresse.seg == 0) && (ziel_adresse.ofs == 0))
+                if ((head.dest_address.seg == 0) && (head.dest_address.ofs == 0))
                 {
                     filename = int2hex((long int)(position.seg) << 4 + position.ofs, 8);
                     filename[1] = 'r';
                 }
                 else
-                    filename = int2hex((long int)(ziel_adresse), 8);
+                    filename = int2hex((long int)(*head.dest_address), 8);
                 filename += find_extension(b6);
 
                 if ((b7 & 0x80) == 0x80)
@@ -574,13 +594,12 @@ int main(int argc, const char* argv[])
                     unzip(&src_rom[4 + 4 + 4]);
 
                     /* runtime/post */
-                    if ((ziel_adresse.seg >= 0xf000) && (set::of(0, 2, eos).has(b6)))
+                    if ((head.dest_address.seg >= 0xf000) && (set::of(0, 2, eos).has(b6)))
                     {
 
-                        Write(' +mix');
-                        Move(unpacked^,
-                            mixf0000[(ziel_adresse.seg - $f000) shr 4 + ziel_adresse.ofs],
-                            unpacked_length);
+                        cout << " +mix";
+                        memmove(&mixf0000[(head.dest_address.seg - 0xf000) >> 4 + head.dest_address.ofs], unpacked,
+                            head.unpacked_length);
                         mix_used = true;
                     }
                 }
@@ -607,8 +626,8 @@ int main(int argc, const char* argv[])
 
     if (file_length >= 128 * 1024)
     {
-        zk[0] = chr(8 + 8);
-        blockread1(&zk[1], 0xe000, 0, ord(zk[0]));
+        zk[0] = (char)(0x10);
+        blockread1(&zk[1], 0xe000, 0, atoi(&zk[0]));
         blockread1(&block_count, 0xe000, 0x10, sizeof(block_count));
     }
     else
@@ -639,13 +658,13 @@ int main(int argc, const char* argv[])
             if ((position.seg == 0xf000) && (position.ofs == 0x1000))
                 present = true;
 
-            zielofs = reference_1994.zielofshi << 8;
-            Write(int2hex(position.seg, 4), ':', int2hex(position.ofs, 4), '  ',
-                int2hex(head_1994.packed_length, 4), '  ????:',
-                int2hex(zielofs, 4), '  T=', int2hex(reference_1994.b0, 2), '':16);
+            target_ofs = reference_1994.target_ofs_hi << 8;
+            cout << int2hex(position.seg, 4) << ':' << int2hex(position.ofs, 4) <<' ' <<
+                int2hex(head_1994.packed_length, 4) << " ????:" <<
+                int2hex(target_ofs, 4) << "  T=" << int2hex(reference_1994.b0, 2) << ' ';
 
-            zk[0] = chr(8);
-            move(head_1994, zk[1], ord(zk[0]));
+            zk[0] = (char)(8);
+            memmove(&zk[1], &head_1994, atoi(&zk[0]));
 
             if (copy(zk, 1, 8 - 1) == "AMIBIOS")
                 cout << "= \"" << zk << '"' << endl;
@@ -662,7 +681,7 @@ int main(int argc, const char* argv[])
                 cout << endl;
 
                 if (set::of(0, 2, eos).has(reference_1994.b0))  /* post/runtime */
-                    move(unpacked, mixf0000[zielofs], head_1994.unpacked_length);
+                    move(unpacked, mixf0000[target_ofs], head_1994.unpacked_length);
             }
 
         }    /* FOR */
@@ -678,8 +697,8 @@ int main(int argc, const char* argv[])
                 cout << int2hex(position.seg, 4) << ':' << int2hex(position.ofs, 4) << "  " <<
                     int2hex(head_1994.packed_length, 4) << "  ????:????  T=??" <<
                     format("", 16);
-                zk[0] = chr(8);
-                move(head_1994, zk[1], ord(zk[0]));
+                zk[0] = (char)(0x08);
+                move(head_1994, zk[1], atoi(&zk[0]));
 
                 if (copy(zk, 1, 8 - 1) == "AMIBIOS")
                     cout << "= \"" << zk << '"' << endl;
@@ -694,8 +713,8 @@ int main(int argc, const char* argv[])
                     unzip(&src_rom);
                     cout << endl;
                 }
-            }    /* gltig */
-        }    /* dabei */
+            }    /* valid */
+        }    
 
 
         filename = string("MIX") + erw;
@@ -703,16 +722,16 @@ int main(int argc, const char* argv[])
         exit(0);
     }    /* amibiosc 1994 */
 
-  /*** Einzelblock *************************************************/
+  /*** single block *************************************************/
     position_l = logic_start;
-    while (strncmp(@rom[position_l], #$55#$aa, 2) == 0) {
+    while (strncmp(&rom[position_l], #$55#$aa, 2) == 0) {
         l = rom[position_l + 2] * 512;
         filename = string(int2hex(position_l, 8)) + erw;
-        Write(':', Int2Hex(position_l, 8), '  ',
-            Int2Hex(l, 4), '  ????:????  T=??',
+        Write(':', int2hex(position_l, 8), '  ',
+            int2hex(l, 4), '  ????:????  T=??',
             '':16);
-        save(rom[position_l], l);
-        WriteLn('=> ', Int2Hex(l, 8), '  ', filename);
+        save(&rom[position_l], l);
+        cout << " => " << int2hex(l, 8) << " " << filename;
         position_l += l;
     }
 
@@ -725,11 +744,11 @@ int main(int argc, const char* argv[])
 
     while (((position_l & 0xffff) != 0) && (set::of(0, 0xff, eos).has(rom[position_l])))
         position_l += 1;
-    blockread1l(&head_1994, position_l + long int(0x10), sizeof(head_1994));
+    memmove(&head_1994, &rom[position_l + long int(0x10)], sizeof(head_1994));
 
     if (test_archive_or_amibios(head_1994))
         position_l += 0x10;
-    blockread1l(&head_1994, position_l, sizeof(head_1994));
+    memmove(&head_1994, &rom[position_l], sizeof(head_1994));
 
     if (!test_archive_or_amibios(head_1994))
     {
@@ -739,7 +758,7 @@ int main(int argc, const char* argv[])
 
     cout << "header error 6!" << endl;
     do {
-        blockread1l(&head_1994, position_l, sizeof(head_1994));
+        memmove(&head_1994, &rom[position_l], sizeof(head_1994));
 
         if (head_1994.packed_length == amib_longint)   /* 'ae5d.rom' */ {
             position_l += 0x10;
@@ -748,14 +767,14 @@ int main(int argc, const char* argv[])
 
         if (!test_archive_or_amibios(head_1994)) {
             position_l = (position_l & 0xfffffff0) + 0x10;
-            blockread1l(&head_1994, position_l, sizeof(head_1994));
+            memmove(&head_1994, &rom[position_l], sizeof(head_1994));
             do {
                 /* file end */
                 if (position_l >= high(rom) - 0x10)
                     exit(0);
 
                 /* check */
-                blockread1l(&head_1994, position_l, sizeof(head_1994));
+                memmove(&head_1994, &rom[position_l], sizeof(head_1994));
                 if (head_1994.packed_length == amib_longint) {
                     position_l += 0x10;
                     continue;
@@ -764,7 +783,7 @@ int main(int argc, const char* argv[])
                 if (test_archive_or_amibios(head_1994))
                     flush();
 
-                /* Schrott */
+                /* remainders */
                 if ((head_1994.packed_length != 0xffffffff)
                     && (head_1994.packed_length != 0)) {
                     position_l = (position_l & 0xffff0000) + 0x10000;
@@ -774,21 +793,20 @@ int main(int argc, const char* argv[])
             } while (!false);
         }
         cout << ':' << int2hex(position_l, 8) << "  " <<
-            int2hex(head_1994.packed_length, 4) << "  ????:????  T=??" <<
-            format("", 16) << "-> ";
+            int2hex(head_1994.packed_length, 4) << "  ????:????  T=??" << "-> ";
 
-        strcpy(filename, int2hex(position_l, 8));
+        filename = int2hex(position_l, 8);
         filename[1] = 'r';
-        strcpy(filename, strcat(filename, erw));
+        filename += erw;
         delete_srcrom();
-        blockread1l(&src_rom, position_l, head_1994.packed_length);
+        memmove(&src_rom, &rom[position_l], head_1994.packed_length);
         unzip(&src_rom);
         cout << endl;
         position_l += head_1994.packed_length; /* 4+4+ */
 
         if (position_l >= high(rom) - 0x10)  flush();
 
-        blockread1l(&head_1994, position_l, sizeof(head_1994));
+        memmove(&head_1994, &rom[position_l], sizeof(head_1994));
         if (((head_1994.packed_length & 0xff000000) != 0)
             && ((head_1994.unpacked_length & 0xff000000) != 0))
             position_l += 4 + 4;

@@ -3,3 +3,5 @@
 ################################################################################
 
 /.vs/amideco_plus/v16/ipch/AutoPCH/5833244cc9588f96/AMIDECO.ipch
+/.vs
+!/CppProperties.json
