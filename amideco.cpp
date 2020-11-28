@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <cstring>
+//#include "lzh5x.cpp"
 
 using namespace std;
 /* AMIDECO rewritten in C++ by computeguy08 */
@@ -227,11 +228,11 @@ void unzip(void* source) {
     struct start with = start_const1;
     memset(unpacked, 0xcc, with.unpacked_length);
 
-    /*if (unzip_lzh5(with.date, unpacked, with.unpacked_length, with.packed_length)) {
+    if (unzip_lzh5x(with.date, unpacked, with.unpacked_length, with.packed_length)) {
         save(unpacked, with.unpacked_length);
         cout << int2hex(with.unpacked_length, 8) << "  " << filename;
     }
-    else*/
+    else
         cout << "File unpack error!";
 }
 
@@ -486,8 +487,8 @@ int main(int argc, const char* argv[])
                 }
 
                 if (head_ami_intel.unpacked_length == 0) {   /* language module at FFFe8800 */
-                    head_ami_intel.packed_length = &rom + (head_ami_intel.source & 0xfffff);
-                    head_ami_intel.unpacked_length = &rom + (head_ami_intel.source & 0xfffff) + 4];
+                    head_ami_intel.packed_length = (long)&rom + (head_ami_intel.source & 0xfffff);
+                    head_ami_intel.unpacked_length = (long)&rom + (head_ami_intel.source & 0xfffff) + 4;
                     head_ami_intel.source += 4 + 4;
                 }
 
@@ -610,13 +611,13 @@ int main(int argc, const char* argv[])
 
         if (mix_used) {
             filename = string("MIX") + erw;
-            save(&mixf0000, sizeof(mixf0000));
+            save(mixf0000, sizeof(mixf0000));
         }
 
         if (position_amibiosc <= 0xf8000)
-            entpack_versuch(0xf8000);
+            try_unpack(0xf8000);
         if (position_amibiosc <= 0xf0000)
-            entpack_versuch(0xf0000);
+            try_unpack(0xf0000);
 
         exit(0);
     }
@@ -715,13 +716,13 @@ int main(int argc, const char* argv[])
 
 
         filename = string("MIX") + erw;
-        save(&mixf0000, sizeof(mixf0000));
+        save(mixf0000, sizeof(mixf0000));
         exit(0);
     }    /* amibiosc 1994 */
 
   /*** single block *************************************************/
     position_l = logic_start;
-    while (strncmp(&rom[position_l], #$55#$aa, 2) == 0) {
+    while (strncmp(&rom[position_l], "Uª", 2) == 0) {
         l = rom[position_l + 2] * 512;
         filename = string(int2hex(position_l, 8)) + erw;
         cout << ':' << int2hex(position_l, 8) << '  ' << int2hex(l, 4) << " ????:????  T=??" << string(16, ' ');
