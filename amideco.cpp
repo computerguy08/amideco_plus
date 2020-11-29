@@ -1,4 +1,4 @@
-#include <iostream>
+#include <iostream>  
 #include <fstream>
 #include <algorithm>
 #include <stdlib.h>
@@ -9,7 +9,7 @@ using namespace std;
 /* AMIDECO rewritten in C++ by computeguy08 */
 
 /* == CONSTANTS ===*/
-const char date[] = "build 100 2020";
+const char date[] = "ver 1.0 Nov.2020";
 const char erw[] = ".dec";
 const int amib_longint = 67 + 77 << 8 + 73 << 16 + 66 << 24;
 const string known_block_type[64] =
@@ -82,7 +82,7 @@ const string known_block_type[64] =
 
 ifstream fin;
 bool new_baseaddr_required, present, mix_used = false;
-char *src_rom, *unpacked, src_directory[255], src_name[255], src_extension[255],
+char* src_rom, * unpacked, src_directory[255], src_name[255], src_extension[255],
 rom[1048575], mixf0000[65535], char8[8];
 string zk, target_dir, filename;
 short int block_count;
@@ -101,7 +101,7 @@ struct pointer_rec {
     short int ofs, seg;
 }position, * pointer_rec_z;
 
-struct head{
+struct head {
     struct pointer_rec next_block;         /* 00 */
     short int packed_length;        /* 04 */
     char b6;                        /* 06 */
@@ -147,6 +147,16 @@ struct {
     long int l14;
 } head_ami_intel;
 
+struct ibm_head ibm_header_const2 = { rom[0xe0000] };
+struct ibm_head ibm_header_const3 = { rom[0xe0000] };
+struct ibm_head ibm_header_const4 = { rom[0xe0000] };
+struct ibm_head ibm_header_const5 = { rom[0xe0000] };
+struct ibm_head ibm_header_const6 = { rom[0xe0000] };
+struct ibm_head ibm_header_const7 = { rom[0xe0000] };
+struct ibm_head ibm_header_const8 = { rom[oj] };
+struct ibm_head ibm_header_const9 = { rom[oj] };
+struct ibm_head ibm_header_const10 = { rom[oj & 0xff0000] };
+
 /* == FUNCTIONS ===*/
 
 char* int2hex(long int number, char n)
@@ -183,19 +193,76 @@ string copy(string str, int index, int count) {
     return string(buffer);
 }
 
-void fsplit(string filename, char* dir, char* name, char* ext) {
-    char tmp = 0;
-    for (int i = 0; i < filename.length(); i++)
-        if (filename[i] == 0x5c)
-            tmp = i;
-    strcpy(dir, copy(filename, 1, tmp).c_str());
-    strcpy(name, copy(filename, tmp + 2, filename.length() - tmp - 5).c_str());
-    strcpy(ext,copy(filename, filename.length() - 3, 4).c_str());
-    
+/*void mkdir_nested(string path) {
+
+    string posp1, posp2, path0, path1, path2, error;
+
+    /*make drive
+    if (copy(path, 2, 255) == ":\\")
+        exit(1);
+    /*Eliminate path line at the end
+    if (path.length() >= 2)
+        if (path[path.length()] == 47 || path[path.length()] == 92)
+            path.resize(path.size() - 1);
+
+
+
+(*bei Fehler schrittweise ..*)
+(*5 = Zugriff verweigert ..existiert schon*)
+    if (error == 3)
+
+path0 = '';    (*schon geschafft*)
+path1 = '';    (*wird sofort angelegt*)
+path2 = path;  (*noch uebrig*)
+
+if (not (pfad2[Length(pfad2)] in['/', '\']))
+    and (Length(pfad2) > 0)
+    then
+{
+    $IfDef VirtualPascal
 }
+pfad2: = pfad2 + SysPathSep;
+{$Else}
+pfad2: = pfad2 + '\';
+{$EndIf}
+
+repeat
+posp1 : = Pos('/', pfad2);
+posp2: = Pos('\',pfad2);
+    if (0 < posp1) and (posp1 < posp2) then
+        pfad1 : = Copy(pfad2, 1, posp1)
+    else
+        pfad1: = Copy(pfad2, 1, posp2);
+Delete(pfad2, 1, Length(pfad1));
+pfad1: = pfad0 + pfad1;
+
+if (*Length(pfad1) > Length('Y:\')
+    or *) Length(pfad1) >= Length('X\')
+        then
+        begin
+        { $IfDef VirtualPascal }
+SetLength(pfad1, Length(pfad1) - 1);
+{$Else}
+Dec(pfad1[0]);
+{$EndIf}
+{$I - }
+MkDir(pfad1);
+{$I + }
+fehler: = IOResult;
+{$IfDef VirtualPascal}
+pfad1: = pfad1 + SysPathSep;
+{$Else}
+pfad1: = pfad1 + '\';
+{$EndIf}
+end;
+pfad0: = pfad1;
+until pfad2 = '';
+end;
+end;
+}*/
 long int issue_address(const long int issue) {
     string solution;
-    long int result, control;
+    long int result, control = 1;
     do {
         cout << "[$" << int2hex(issue, 5) << "] ?";
         if (fin.eof())
@@ -228,12 +295,12 @@ void unzip(void* source) {
     struct start with = start_const1;
     memset(unpacked, 0xcc, with.unpacked_length);
 
-    if (unzip_lzh5x(with.date, unpacked, with.unpacked_length, with.packed_length)) {
+    /*if (unzip_lzh5x(with.date, unpacked, with.unpacked_length, with.packed_length)) {
         save(unpacked, with.unpacked_length);
         cout << int2hex(with.unpacked_length, 8) << "  " << filename;
     }
-    else
-        cout << "File unpack error!";
+    else*/
+    cout << "File unpack error!";
 }
 
 bool test_archive_or_amibios(head_1994_type& head)
@@ -254,9 +321,9 @@ string block_type(char t)
 {
     string tmp = "";
     for (int i = 0; i < 64; i++) {
-        if(t == i)
+        if (t == i)
             tmp = known_block_type[t];
-    }    
+    }
     if (tmp == "")
         tmp = int2hex(head.b6, 2) + '?';
     while (tmp.length() < 20)  tmp += ' ';
@@ -275,26 +342,9 @@ string find_extension(char t) {
     return tmp;
 }
 
-void open_file()
-{
-    cout << filename << " ";
-    fin.open(filename);
-    filecount += 1;
-}
-
-struct ibm_head ibm_header_const2 = { rom[0xe0000] };
-struct ibm_head ibm_header_const3 = { rom[0xe0000] };
-struct ibm_head ibm_header_const4 = { rom[0xe0000] };
-struct ibm_head ibm_header_const5 = { rom[0xe0000] };
-struct ibm_head ibm_header_const6 = { rom[0xe0000] };
-struct ibm_head ibm_header_const7 = { rom[0xe0000] };
-struct ibm_head ibm_header_const8 = { rom[oj] };
-struct ibm_head ibm_header_const9 = { rom[oj] };
-struct ibm_head ibm_header_const10 = { rom[oj & 0xff0000] };
-
 void try_unpack(long int o)
 {
-    memmove(&head_1994,&rom[o], sizeof(head_1994));
+    memmove(&head_1994, &rom[o], sizeof(head_1994));
     if (!test_archive_or_amibios(head_1994))
         return;
     cout << ":" << int2hex(o, 8) << " " << int2hex(head_1994.packed_length, 4) << " ????:????  T=??" << string(16, ' ') << "->";
@@ -307,44 +357,77 @@ void try_unpack(long int o)
     cout << endl;
 }
 
+void open_file()
+{
+    fin.open(filename);
+    if (!fin) {
+        cout << "== File: cannot open! ==" << endl;
+        exit(3);
+    }
+    else {
+        cout << "== File: " << filename << " (";
+        file_length = filesize(filename);
+        if (file_length > 0x100000) {
+            fin.close();
+            cout << "too big! (";
+            exit(4);
+        }
+        filecount += 1;
+        cout << file_length / 1024 << " KB) ==" << endl;
+
+    }
+
+}
+
+void fsplit(string filename, char* dir, char* name, char* ext) {
+    char tmp = 0;
+    //filename = "qdi.ami";
+    for (int i = 0; i < filename.length(); i++)
+        if (filename[i] == 0x5c)
+            tmp = i;
+    if (tmp) {
+        strcpy_s(dir, 255, copy(filename, 1, tmp).c_str());
+        strcpy_s(name, 255, copy(filename, tmp + 2, filename.length() - tmp - 5).c_str());
+    }
+    else {
+        strcpy_s(dir, 255, "");
+        strcpy_s(name, 255, copy(filename, 1, filename.length() - tmp - 4).c_str());
+    }
+    strcpy_s(ext, 255, copy(filename, filename.length() - 3, 4).c_str());
+    if (_stricmp(ext, ".BIN") && _stricmp(ext, ".ROM") && _stricmp(ext, ".AMI")) {
+        cout << "== File: invalid extension! ==" << endl;
+        exit(2);
+    }
+    //cout << dir << " " << name << " " << ext << endl;
+}
+
 int main(int argc, const char* argv[])
 {
-    cout << "AMIDECO Plus %s" << date;
-    if (argc < 1)
-    {
-        cout << "parameter error!" << endl;
+    cout << "==============================" << endl;
+    cout << "AMIDECO Plus " << date << endl;
+    /* == check first argument to be a file name == */
+    if (argc < 2) {
+        cout << "== File: not specified! ==" << endl;
         exit(1);
     }
-    cout << endl;
-
+    filename = argv[1];
+    /* == split filename and check for valid extension; if ok, then open == */
+    fsplit(filename, src_directory, src_name, src_extension);
+    open_file();
+    /* == allocate memory for the ROM contents == */
     src_rom = (char*)malloc(1024 * 1024);
     if (src_rom == NULL) exit(1);
     unpacked = (char*)malloc(1024 * 1024);
     if (unpacked == NULL) exit(1);
     memset(mixf0000, 0xcc, sizeof(mixf0000));
-    filename = argv[1];
-
-#ifdef DEBUG*
-    filename = "C:\PCI546N3.ROM";
-#endif
-
-    fsplit(filename, src_directory, src_name, src_extension);
-    open_file();
-    file_length = filesize(filename);
-
-    if (file_length > 1 * 1024 * 1024) {
-        fin.close();
-        cout << "File length is too big: " << file_length;
-        exit(1);
-    }
 
     memset(rom, 0, sizeof(rom));
     logic_start = 0x100000;
     new_baseaddr_required = true;
-
+    exit(0);
     do {
-        fin.seekg(0);
-        fin.read(ami_flash_head, sizeof(ami_flash_head));
+        fin.seekg(0x00);
+        fin.read(ami_flash_head.signature, sizeof(ami_flash_head));
         if (strcmp(ami_flash_head.signature, "FLASH") == 0)
         {
             if (new_baseaddr_required)
@@ -366,16 +449,17 @@ int main(int argc, const char* argv[])
             if ((strcmp(ami_flash_head.logical_area_name, "Boot Block") == 0)
                 && (ami_flash_head.last_file_in_chain == 0xff)) {
                 ami_flash_head.last_file_in_chain = 0;
-                strcpy(ami_flash_head.filename_of_next_file, strcat(src_name, ".BIO"));
+                strcat_s(src_name, 255, ".BIO");
+                strcpy_s(ami_flash_head.filename_of_next_file, 16, src_name);
                 new_baseaddr_required = true;
             }
 
             if (ami_flash_head.last_file_in_chain == 0xff) {
                 file_length = 0;
                 logic_start = min_loadaddress;
-                flush();
+                //flush();
             }
-            filename = strcat(src_directory, ami_flash_head.filename_of_next_file);
+            filename = strcat_s(src_directory, 255, ami_flash_head.filename_of_next_file);
             open_file();
 
         }
@@ -386,22 +470,12 @@ int main(int argc, const char* argv[])
             fin.read(&rom[logic_start], file_length);
             fin.close();
             cout << endl;
-            flush();
+            //flush();
         }
 
-    } while (!false);
-
+    } while (0/*!false*/);
 
     target_dir = argv[2];
-
-    mkdir_verschachtelt(target_dir);
-
-#ifdef DEBUG*
-    filename = "BIOS.ROM";
-    save(&rom, sizeof(rom));
-#endif
-
-
     /*** IBM without AMIBIOSC *******************************************/
     if ((strncmp(&rom[0xfe008], "COPR. IBM 1981", strlen("COPR. IBM 1981")) == 0)
         && (logic_start <= 0xe0000)
@@ -430,23 +504,23 @@ int main(int argc, const char* argv[])
                     cout << "." << endl;
                 else
                     if (rom[oj + long int(4)] == 1 || rom[oj + long int(4)] == 2)
-                        for(char i = 0; i < 10; i++)
-                            if( i == (char)(rom[oj + long int(7)]))
+                        for (char i = 0; i < 10; i++)
+                            if (i == (char)(rom[oj + long int(7)]))
                                 cout << copy(&char8[rom[oj]], 1, 8) << endl;
-                    else
-                        cout << "?" << endl;
+                            else
+                                cout << "?" << endl;
                 // skip to next 64KB block
                 oj = (o + (long int)(0xffff)) & 0xffff0000;
                 o = oj + (long int)(2 * sizeof(ibm_header));
                 continue;
             }
             struct ibm_head with2 = ibm_header_const9;
-             p = (oj & 0xffff0000) + (with2.ami_seg - 0xe000) << 4 + with2.ami_ofs;
+            p = (oj & 0xffff0000) + (with2.ami_seg - 0xe000) << 4 + with2.ami_ofs;
             filename = (string)int2hex(p, 8) + erw;
-            cout << "--> " << int2hex(with2.ami_seg, 4) << ':' << int2hex(with2.ami_ofs, 4) << 
+            cout << "--> " << int2hex(with2.ami_seg, 4) << ':' << int2hex(with2.ami_ofs, 4) <<
                 ',' << int2hex(with2.blocklength, 8);
             if (with2.ami_ofs > 0) {
-                cout << "  lzh5: " << int2hex(head_1994_type(rom[p]).packed_length, 8) << "->";
+                //cout << "  lzh5: " << int2hex(head_1994_type(rom[p]).packed_length, 8) << "->";
                 unzip(&rom[p]);
                 cout << endl;
                 o = max(o, p + with2.blocklength);
@@ -492,7 +566,7 @@ int main(int argc, const char* argv[])
                     head_ami_intel.source += 4 + 4;
                 }
 
-                cout << ':' << int2hex(head_ami_intel.source, 8) << "  " << int2hex(head_ami_intel.packed_length, 4) 
+                cout << ':' << int2hex(head_ami_intel.source, 8) << "  " << int2hex(head_ami_intel.packed_length, 4)
                     << "  :" << int2hex(head_ami_intel.target, 8) << "  T=" << int2hex(head_ami_intel.typ, 4) << string(17, ' ');
                 filename = string(int2hex(head_ami_intel.source, 8)) + erw;
 
@@ -517,10 +591,10 @@ int main(int argc, const char* argv[])
   /*** 1995+ with AMIBIOSC ******************************************/
     position_amibiosc = 0x100000;
     while (position_amibiosc > 0) {
-        if (strncmp(&rom[position_amibiosc - (long)22], "AMIBIOSC0", strlen("AMIBIOSC0")) == 0)
-            flush();
-        else
-            position_amibiosc -= 0x800;
+        /*if (strncmp(&rom[position_amibiosc - (long)22], "AMIBIOSC0", strlen("AMIBIOSC0")) == 0)
+            //flush();
+        else*/
+        position_amibiosc -= 0x800;
     }
 
     if (position_amibiosc > 0) {
@@ -542,7 +616,7 @@ int main(int argc, const char* argv[])
 
             position_amibiosc = sizeof(rom) - 0x10000 + ((int)(&rom[0xFffa0]) && 0xffff);
             if (strncmp(&rom[position_amibiosc], "AMIBIOSC", strlen("AMIBIOSC")) == 0) {
-                zk[0] = string("AMIBIOSC0627").length();
+                zk[0] = 12; //string("AMIBIOSC0627").length();
                 memmove(&zk[1], &rom[position_amibiosc], atoi(&zk[0]));
                 cout << '"' << zk << '"' << endl;
                 memmove(&position, &rom[position_amibiosc + 0x12], sizeof(position));
@@ -582,16 +656,16 @@ int main(int argc, const char* argv[])
                     filename = int2hex((long int)(position.seg) << 4 + position.ofs, 8);
                     filename[1] = 'r';
                 }
-                else
-                    filename = int2hex(head.dest_address, 8);
+                /*else
+                    filename = int2hex(head.dest_address, 8);*/
                 filename += find_extension(head.b6);
 
-                if ((head.b7 & 0x80) == 0x80){      /* not compressed */
+                if ((head.b7 & 0x80) == 0x80) {      /* not compressed */
                     cout << "=> ";
                     save(&src_rom[4 + 4 + 4], head.packed_length);
                     cout << int2hex(head.packed_length, 8) << "  " << filename;
                 }
-                else{
+                else {
                     cout << "-> ";
                     unzip(&src_rom[4 + 4 + 4]);
                     if (head.dest_address.seg >= 0xf000) /* runtime/post */
@@ -600,7 +674,7 @@ int main(int argc, const char* argv[])
                                 cout << " +mix";
                                 mix_used = true;
                                 memmove(&mixf0000[(head.dest_address.seg - 0xf000) >> 4 + head.dest_address.ofs], unpacked,
-                                        head.unpacked_length);
+                                    head.unpacked_length);
                             }
                 }
                 cout << endl;
@@ -624,7 +698,7 @@ int main(int argc, const char* argv[])
 
     /*** AMIBIOSC at E000:0000 **************************************/
 
-    if (file_length >= 128 * 1024)
+    if (file_length >= 131072)
     {
         zk[0] = (char)(0x10);
         blockread1(&zk[1], 0xe000, 0, atoi(&zk[0]));
@@ -659,7 +733,7 @@ int main(int argc, const char* argv[])
                 present = true;
 
             target_ofs = reference_1994.target_ofs_hi << 8;
-            cout << int2hex(position.seg, 4) << ':' << int2hex(position.ofs, 4) <<' ' <<
+            cout << int2hex(position.seg, 4) << ':' << int2hex(position.ofs, 4) << ' ' <<
                 int2hex(head_1994.packed_length, 4) << " ????:" <<
                 int2hex(target_ofs, 4) << "  T=" << int2hex(reference_1994.b0, 2) << ' ';
 
@@ -685,7 +759,7 @@ int main(int argc, const char* argv[])
         }    /* FOR */
 
 
-        if (~present)
+        if (!present)
         {
             position.ofs = 0x1000;
             position.seg = 0xf000;
@@ -712,7 +786,7 @@ int main(int argc, const char* argv[])
                     cout << endl;
                 }
             }    /* valid */
-        }    
+        }
 
 
         filename = string("MIX") + erw;
@@ -731,18 +805,18 @@ int main(int argc, const char* argv[])
         position_l += l;
     }
 
-    while ((position_l < 0xfe000) && ((position_l & 0xffff) == 0)) {
+    /*while ((position_l < 0xfe000) && ((position_l & 0xffff) == 0)) {
         for (char i = 0; i <= 255; i++)
             if (i == rom[position_l]) {
                 for (counter = 1; counter <= 4096 - 1; counter++)
                     if (rom[position_l + long int(counter)] != rom[position_l])  flush();
                 position_l += 4096;
             }
-    }
+    }*/
 
     while ((position_l & 0xffff) != 0) {
-        for (char i = 0; i <= 255; i++)
-            if (i == rom[position_l]) 
+        for (int i = 0; i <= 255; i++)
+            if (i == rom[position_l])
                 position_l += 1;
     }
     memmove(&head_1994, &rom[position_l + long int(0x10)], sizeof(head_1994));
@@ -771,7 +845,7 @@ int main(int argc, const char* argv[])
             memmove(&head_1994, &rom[position_l], sizeof(head_1994));
             do {
                 /* file end */
-                if (position_l >= high(rom) - 0x10)
+                if (position_l >= 0XFFFFF - 0x10)
                     exit(0);
 
                 /* check */
@@ -781,10 +855,10 @@ int main(int argc, const char* argv[])
                     continue;
                 }
 
-                if (test_archive_or_amibios(head_1994))
-                    flush();
+                /*if (test_archive_or_amibios(head_1994))
+                    flush();*/
 
-                /* remainders */
+                    /* remainders */
                 if ((head_1994.packed_length != 0xffffffff)
                     && (head_1994.packed_length != 0)) {
                     position_l = (position_l & 0xffff0000) + 0x10000;
@@ -805,14 +879,14 @@ int main(int argc, const char* argv[])
         cout << endl;
         position_l += head_1994.packed_length; /* 4+4+ */
 
-        if (position_l >= high(rom) - 0x10)  flush();
+        //if (position_l >= 0xFFFFF - 0x10)  flush();
 
         memmove(&head_1994, &rom[position_l], sizeof(head_1994));
         if (((head_1994.packed_length & 0xff000000) != 0)
             && ((head_1994.unpacked_length & 0xff000000) != 0))
             position_l += 4 + 4;
 
-    } while (!(position_l >= high(rom) - 0x10));
+    } while (!(position_l >= 0XFFFFF - 0x10));
     exit(0);
     return 0;
 }
