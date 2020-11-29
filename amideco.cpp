@@ -796,7 +796,7 @@ int main(int argc, const char* argv[])
 
   /*** single block *************************************************/
     position_l = logic_start;
-    while (strncmp(&rom[position_l], "Uª", 2) == 0) {
+    while (strncmp(&rom[position_l], "Uï¿½", 2) == 0) {
         l = rom[position_l + 2] * 512;
         filename = string(int2hex(position_l, 8)) + erw;
         cout << ':' << int2hex(position_l, 8) << '  ' << int2hex(l, 4) << " ????:????  T=??" << string(16, ' ');
