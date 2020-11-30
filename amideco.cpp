@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdlib.h>
 #include <cstring>
+#include <sys/stat.h>
 //#include "lzh5x.cpp"
 
 using namespace std;
@@ -85,7 +86,7 @@ bool new_baseaddr_required, present, mix_used = false;
 char* src_rom, * unpacked, src_directory[255], src_name[255], src_extension[255],
 rom[1048576], mixf0000[65535], char8[8];
 string zk, target_dir, filename;
-short int block_count;
+short int block_count, match = 0;
 int min_loadaddress = 0x100000, filecount = 0, counter, target_seg, target_ofs, max_s, rom_start;
 long file_length, logic_start, position_amibiosc, position_l, intel_tabel_ofs, loadaddress, l, o, oj, p;
 
@@ -187,7 +188,7 @@ long filesize(string filename)
 }
 
 string copy(string str, int index, int count) {
-    char buffer[20];
+    char buffer[20] = "";
     size_t length = str.copy(buffer, count, index - 1);
     buffer[length] = '\0';
     return string(buffer);
@@ -361,19 +362,19 @@ void open_file()
 {
     fin.open(filename);
     if (!fin) {
-        cout << "File: cannot open!" << endl;
-        exit(3);
+        cout << "ERROR: cannot open file!" << endl;
+        exit(4);
     }
     else {
-        cout << "File: " << filename << " (";
+
         file_length = filesize(filename);
         if (file_length > 0x100000) {
             fin.close();
-            cout << "too big! (";
-            exit(4);
+            cout << "ERROR: file is too big! (over 1 MB)";
+            exit(5);
         }
         filecount += 1;
-        cout << file_length / 1024 << " KB)" << endl;
+        cout << "File: " << filename << " (" << file_length / 1024 << " KB)" << endl;
 
     }
 
@@ -381,10 +382,19 @@ void open_file()
 
 void fsplit(string filename, char* dir, char* name, char* ext) {
     char tmp = 0;
+    bool dot = false;
     //filename = "qdi.ami";
-    for (int i = 0; i < filename.length(); i++)
-        if (filename[i] == 0x5c)
+    for (int i = 0; i < filename.length(); i++) {
+        if (filename[i] == 0x5c) // check for slash and dot
             tmp = i;
+        if (filename[i] == 0x2e)
+            dot = true;
+    }
+
+    if (!dot) { // if dot is missing => there is no file extension
+        cout << "ERROR: invalid file extension!" << endl;
+        exit(3);
+    }
     if (tmp) {
         strcpy_s(dir, 255, copy(filename, 1, tmp).c_str());
         strcpy_s(name, 255, copy(filename, tmp + 2, filename.length() - tmp - 5).c_str());
@@ -394,11 +404,12 @@ void fsplit(string filename, char* dir, char* name, char* ext) {
         strcpy_s(name, 255, copy(filename, 1, filename.length() - tmp - 4).c_str());
     }
     strcpy_s(ext, 255, copy(filename, filename.length() - 3, 4).c_str());
-    if (_stricmp(ext, ".BIN") && _stricmp(ext, ".ROM") && _stricmp(ext, ".AMI")) {
-        cout << "File: invalid extension!" << endl;
-        exit(2);
-    }
     //cout << dir << " " << name << " " << ext << endl;
+    if (_stricmp(ext, ".BIN") && _stricmp(ext, ".ROM") && _stricmp(ext, ".AMI")) {
+        cout << "ERROR: invalid file extension!" << endl;
+        exit(3);
+    }
+
 }
 
 int main(int argc, const char* argv[])
@@ -407,8 +418,8 @@ int main(int argc, const char* argv[])
     cout << "AMIDECO Plus " << date << endl;
     /* == check first argument to be a file name == */
     if (argc < 2) {
-        cout << "File: not specified!" << endl;
-        exit(1);
+        cout << "ERROR: a file was not specified!" << endl;
+        exit(2);
     }
     filename = argv[1];
     /* == split filename and check for valid extension; if ok, then open == */
@@ -429,7 +440,30 @@ int main(int argc, const char* argv[])
     do {
         fin.seekg(0x00);
         fin.read(ami_flash_head.signature, sizeof(ami_flash_head));
-        /* multiple files */
+        /* check for ODD and EVEN XT -> 286 AMI BIOSes */
+        if (!strncmp(ami_flash_head.signature, "ª@", 2) || !strncmp(ami_flash_head.signature, "Ué", 2) ||
+            !strncmp(ami_flash_head.signature, "13AAMMII", 8) || !strncmp(ami_flash_head.signature, "02AAMMII", 8)) {
+            // LOW or HIGH detected
+            match++;
+            logic_start -= file_length;
+            fin.seekg(0x00);
+            fin.read(&rom[logic_start], file_length);
+            fin.close();
+            if (logic_start == (max_s - file_length)) {
+                //we'll check for argv[2] to be there and put it in memory as well
+                if ((argc > 2) && (argv[2] != NULL) && argv[1] == filename) {
+                    filename = argv[2];
+                    fsplit(filename, src_directory, src_name, src_extension);
+                    open_file();
+                    continue;
+                }
+                else {
+                    cout << "ERROR: a file was not specified! (is BIOS split in two?)" << endl;
+                    exit(6);
+                }
+            }
+
+        }
         if (strcmp(ami_flash_head.signature, "FLASH") == 0)
         {
             if (new_baseaddr_required)
@@ -467,24 +501,63 @@ int main(int argc, const char* argv[])
         }
         /* normal single file */
         else {
-            logic_start -= file_length;
-            fin.seekg(0x00);
-            fin.read(&rom[logic_start], file_length);
-
+            //make sure there is only a single file in memory (no previous if statements executed)
+            if (filecount == 1) {
+                logic_start -= file_length;
+                fin.seekg(0x00);
+                fin.read(&rom[logic_start], file_length);
+            }
+            if (!strcmp(argv[1], argv[2])) {
+                cout << "ERROR: the same file was specified twice!" << endl;
+                exit(7);
+            }
+            if (match != filecount) {
+                cout << "ERROR: file mismatch!" << endl;
+                exit(8);
+            }
+            if (filecount == 2 && logic_start == (max_s - 2 * file_length)) {
+                logic_start = (max_s - 4 * file_length);
+                for (long i = logic_start; i <= (max_s - 2 * file_length); i += 2) {
+                    if (!strncmp(&rom[max_s - file_length], "ª@", 2)
+                        || !strncmp(&rom[max_s - file_length], "02AAMMII", 8)) {
+                        rom[i] = rom[logic_start + 3 * file_length];
+                        rom[i + 1] = rom[logic_start + 2 * file_length];
+                    }
+                    else {
+                        rom[i + 1] = rom[logic_start + 3 * file_length];
+                        rom[i] = rom[logic_start + 2 * file_length];
+                    }
+                    //cout << rom[i] << rom[i+1];
+                    logic_start++;
+                }
+                logic_start = 0;
+                break;
+            }
         }
 
     } while (logic_start > 0x00);
-    fin.close();
-    for (int i = 0xe000; i < 0xe00f; i++)cout << &rom[i];
-
+    cout << "------------------------------" << endl;
     /* == AMIBIOS prior to 1993 (uncompressed) == */
-    rom_start = max_s - file_length;
-    if (copy(&rom[rom_start], 1, 16) == "0123AAAAMMMMIIII") {
-        cout << "Type: AMIBIOS uncompressed (<1993)" << endl;
-        cout << "Core version: " << copy(&rom[rom_start + 0x80], 1, 6) << endl;
-        cout << "POST string: " << &rom[rom_start + 0x78] << endl;
+
+    if (filecount == 1) {
+        rom_start = max_s - file_length;
+        if (copy(&rom[rom_start], 1, 16) == "0123AAAAMMMMIIII") {
+            cout << "Type: AMIBIOS uncompressed (<1993)" << endl;
+            cout << "Core version: " << copy(&rom[rom_start + 0x90], 1, 6) << endl;
+            cout << "POST string: " << &rom[rom_start + 0x78] << endl;
+        }
+        exit(0);
     }
-    exit(0);
+    if (filecount == 2) {
+        rom_start = max_s - 4 * file_length;
+        if (copy(&rom[rom_start], 1, 16) == "0123AAAAMMMMIIII") {
+            cout << "Type: AMIBIOS uncompressed (<1993) and split" << endl;
+            cout << "Core version: " << copy(&rom[rom_start + 0x90], 1, 6) << endl;
+            cout << "POST string: " << &rom[rom_start + 0x78] << endl;
+        }
+        //cout << copy(&rom[rom_start], 1, 16);
+        exit(0);
+    }
 
     /*** AMIBIOSC at E000:0000 **************************************/
 
@@ -608,9 +681,9 @@ int main(int argc, const char* argv[])
             || (strncmp(&rom[0xFff50], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
             || (strncmp(&rom[0xFff54], "AMIBOOT ROM", strlen("AMIBOOT ROM")) == 0)
             || ((strncmp(&rom[0xFffd4], "$SIP", strlen("$SIP")) == 0)
-                && (((int)(&rom[0xFffd0]) && 0xfff80000) == 0xfff80000))) {
+                && ((&rom[0xFffd0] && 0xfff80000) == 0xfff80000))) {
 
-            position_amibiosc = sizeof(rom) - 0x10000 + ((int)(&rom[0xFffa0]) && 0xffff);
+            position_amibiosc = sizeof(rom) - 0x10000 + (&rom[0xFffa0] && 0xffff);
             if (strncmp(&rom[position_amibiosc], "AMIBIOSC", strlen("AMIBIOSC")) == 0) {
                 zk[0] = 12; //string("AMIBIOSC0627").length();
                 memmove(&zk[1], &rom[position_amibiosc], atoi(&zk[0]));
@@ -645,7 +718,7 @@ int main(int argc, const char* argv[])
                     "  " << block_type(head.b6);
 
                 delete_srcrom();
-                blockread1(&src_rom, position.seg, position.ofs, long int(sizeof(head) + head.packed_length));
+                blockread1(&src_rom, position.seg, position.ofs, long(sizeof(head) + head.packed_length));
 
                 if ((head.dest_address.seg == 0) && (head.dest_address.ofs == 0))
                 {
@@ -719,9 +792,9 @@ int main(int argc, const char* argv[])
                 if ((with.blocklength == 0) && (with.ami_ofs == 0) && (with.ami_seg == 0))
                     cout << "." << endl;
                 else
-                    if (rom[oj + long int(4)] == 1 || rom[oj + long int(4)] == 2)
+                    if (rom[oj + 4] == 1 || rom[oj + 4] == 2)
                         for (char i = 0; i < 10; i++)
-                            if (i == (char)(rom[oj + long int(7)]))
+                            if (i == (char)(rom[oj + 7]))
                                 cout << copy(&char8[rom[oj]], 1, 8) << endl;
                             else
                                 cout << "?" << endl;
@@ -776,11 +849,11 @@ int main(int argc, const char* argv[])
                     continue;
                 }
 
-                if (head_ami_intel.unpacked_length == 0) {   /* language module at FFFe8800 */
-                    head_ami_intel.packed_length = (long)&rom + (head_ami_intel.source & 0xfffff);
-                    head_ami_intel.unpacked_length = (long)&rom + (head_ami_intel.source & 0xfffff) + 4;
+                /*if (head_ami_intel.unpacked_length == 0) {   /* language module at FFFe8800 *//*
+                    head_ami_intel.packed_length = (long)(&rom + (head_ami_intel.source & 0xfffff));
+                    head_ami_intel.unpacked_length = (long)(&rom + (head_ami_intel.source & 0xfffff) + 4);
                     head_ami_intel.source += 4 + 4;
-                }
+                }*/
 
                 cout << ':' << int2hex(head_ami_intel.source, 8) << "  " << int2hex(head_ami_intel.packed_length, 4)
                     << "  :" << int2hex(head_ami_intel.target, 8) << "  T=" << int2hex(head_ami_intel.typ, 4) << string(17, ' ');
@@ -808,7 +881,7 @@ int main(int argc, const char* argv[])
 
   /*** single block *************************************************/
     position_l = logic_start;
-    while (strncmp(&rom[position_l], "U�", 2) == 0) {
+    while (strncmp(&rom[position_l], "Uª", 2) == 0) {
         l = rom[position_l + 2] * 512;
         filename = string(int2hex(position_l, 8)) + erw;
         cout << ':' << int2hex(position_l, 8) << '  ' << int2hex(l, 4) << " ????:????  T=??" << string(16, ' ');
@@ -831,7 +904,7 @@ int main(int argc, const char* argv[])
             if (i == rom[position_l])
                 position_l += 1;
     }
-    memmove(&head_1994, &rom[position_l + long int(0x10)], sizeof(head_1994));
+    memmove(&head_1994, &rom[position_l + 0x10], sizeof(head_1994));
 
     if (test_archive_or_amibios(head_1994))
         position_l += 0x10;
