@@ -84,7 +84,7 @@ const string known_block_type[64] =
 ifstream fin;
 bool new_baseaddr_required, present, mix_used = false;
 char* src_rom, * unpacked, src_directory[255], src_name[255], src_extension[255], result[32],
-rom[1048576], mixf0000[65535], char8[8];
+rom[1048576], mixf0000[65535], char8[8], buffer[255] = "";
 string zk, target_dir, filename;
 short int block_count, match = 0;
 int min_loadaddress = 0x100000, filecount = 0, counter, target_seg, target_ofs, max_s, rom_start;
@@ -187,7 +187,6 @@ long filesize(string filename)
 }
 
 string copy(string str, int index, int count) {
-    char buffer[20] = "";
     size_t length = str.copy(buffer, count, index - 1);
     buffer[length] = '\0';
     return string(buffer);
@@ -360,6 +359,7 @@ void try_unpack(long int o)
 void open_file()
 {
     fin.open(filename);
+    match++;
     if (!fin) {
         cout << "ERROR: cannot open file!" << endl;
         exit(4);
@@ -377,6 +377,15 @@ void open_file()
 
     }
 
+}
+
+int strcicmp(char const* a, char const* b)
+{
+    for (;; a++, b++) {
+        int d = tolower((unsigned char)*a) - tolower((unsigned char)*b);
+        if (d != 0 || !*a)
+            return d;
+    }
 }
 
 void fsplit(string filename, char* dir, char* name, char* ext) {
@@ -404,7 +413,7 @@ void fsplit(string filename, char* dir, char* name, char* ext) {
     }
     strcpy(ext, copy(filename, filename.length() - 3, 4).c_str());
     //cout << dir << " " << name << " " << ext << endl;
-    if (stricmp(ext, ".BIN") && stricmp(ext, ".ROM") && stricmp(ext, ".AMI")) {
+    if (strcicmp(ext, ".BIN") && strcicmp(ext, ".ROM") && strcicmp(ext, ".AMI")) {
         cout << "ERROR: invalid file extension!" << endl;
         exit(3);
     }
@@ -443,7 +452,6 @@ int main(int argc, const char* argv[])
         if (!strncmp(ami_flash_head.signature, "ª@", 2) || !strncmp(ami_flash_head.signature, "Ué", 2) ||
             !strncmp(ami_flash_head.signature, "13AAMMII", 8) || !strncmp(ami_flash_head.signature, "02AAMMII", 8)) {
             // LOW or HIGH detected
-            match++;
             logic_start -= file_length;
             fin.seekg(0x00);
             fin.read(&rom[logic_start], file_length);
@@ -484,8 +492,8 @@ int main(int argc, const char* argv[])
             if ((strcmp(ami_flash_head.logical_area_name, "Boot Block") == 0)
                 && (ami_flash_head.last_file_in_chain == 0xff)) {
                 ami_flash_head.last_file_in_chain = 0;
-                strcat_s(src_name, 255, ".BIO");
-                strcpy_s(ami_flash_head.filename_of_next_file, 16, src_name);
+                strcat(src_name, ".BIO");
+                strcpy(ami_flash_head.filename_of_next_file, src_name);
                 new_baseaddr_required = true;
             }
 
@@ -506,10 +514,11 @@ int main(int argc, const char* argv[])
                 fin.seekg(0x00);
                 fin.read(&rom[logic_start], file_length);
             }
-            if (!strcmp(argv[1], argv[2])) {
-                cout << "ERROR: the same file was specified twice!" << endl;
-                exit(7);
-            }
+            if (argc > 2)
+                if (!strcmp(argv[1], argv[2])) {
+                    cout << "ERROR: the same file was specified twice!" << endl;
+                    exit(7);
+                }
             if (match != filecount) {
                 cout << "ERROR: file mismatch!" << endl;
                 exit(8);
