@@ -4,11 +4,6 @@
 #include <cstring>
 using namespace std;
 
-typedef struct tword* pword;
-typedef array<0, 32759, integer> tword;
-typedef struct tbyte* pbyte;
-typedef array<0, 65519, byte> tbyte;
-
 /*
 NOTE :
    The following constants are set to the values used by LHArc.
@@ -63,67 +58,46 @@ const int windowsize = 1 << winbit;
 const int bufbit = 13;
 const int bufsize = 1 << bufbit;
 
-string bitbuf;
-int n, heapsize;
-string subbitbuf, bitcount;
-
-array<0, 2 * (nc - 1), word> left, right;
-
-array<0, 255, word> pttable;
-array<0, pred(integer, npt), byte> ptlen;
-array<0, 4095, word> ctable;
-array<0, pred(integer, nc), byte> clen;
-
-string blocksize;
-
-bool fehler;
+string  pttable, ctable, right = "X";
+int n, heapsize, bitcount, bitbuf, subbitbuf, blocksize, tword[32759], decode_i, decode_j;
+char ptlen[npt], clen[nc], tbyte[65519], left[1024], * r_pointer, * increase, * w_pointer;
+bool error;
+long compsize;
 
 /********************************** File I/O **********************************/
 
-char *lesezeiger,
-quellende,
-schreibzeiger;
-
-char getc()
-{
-    char *getc_result;
-    if (lesezeiger == quellende)
-        getc_result = 0;
-    else
-    {
-        getc_result = *lesezeiger;
-        lesezeiger += 1;
+char getc() {
+    if (r_pointer == increase)
+        return 0;
+    else {
+        r_pointer += 1;
+        return *(r_pointer);
     }
-    return getc_result;
 }
 
-void putc(char c)
-{
-    *schreibzeiger = c;
-    schreibzeiger += 1;
+void putc(char c) {
+    *(w_pointer) = c;
+    w_pointer += 1;
 }
 
-int bread(void* p, int &n)
+int bread(void* p, int& n)
 {
-    long uebrig;
+    long left;
+    left = increase - r_pointer;
+    if (left == 0)
+        __asm int 3;
+    if (left > n)
+        left = n;
 
-    int bread_result;
-    uebrig = ofs(*quellende) - ofs(*lesezeiger);
-    if (uebrig == 0)
-        /* asm int 3 end;*/
-        if (uebrig > n)
-            uebrig = n;
-
-    memmove(p, &lesezeiger, uebrig);
-    lesezeiger += uebrig;
-    bread_result = uebrig;
-    return bread_result;
+    memmove(p, &r_pointer, left);
+    r_pointer += left;
+    return left;
 }
 
-void b_write(void p, int &n)
+void b_write(void* p, int& n)
 {
-    memmove(&schreibzeiger, p, n);
-    schreibzeiger += n;
+    memmove(&w_pointer, p, n);
+    w_pointer += n;
 }
 
 /**************************** Bit handling routines ***************************/
@@ -146,15 +120,13 @@ void fillbuf(int n)
     bitbuf = bitbuf | ((subbitbuf & 0xffff) >> bitcount);
 }
 
-string getbits(int n)
+int getbits(int n)
 {
-    string getbits_result;
-    getbits_result = (bitbuf & 0xffff) >> (bitbufsiz - n);
     fillbuf(n);
-    return getbits_result;
+    return (bitbuf & 0xffff) >> (bitbufsiz - n);
 }
 
-void putbits(int n, string x)
+void putbits(int n, int x)
 {
     if (n < bitcount)
     {
@@ -175,10 +147,6 @@ void putbits(int n, string x)
     }
 }
 
-void initgetbits()
-{
-    bitbuf = 0; subbitbuf = 0; bitcount = 0; fillbuf(bitbufsiz);
-}
 
 void initputbits()
 {
@@ -187,85 +155,82 @@ void initputbits()
 
 /******************************** Decompression *******************************/
 
-void maketable(int nchar, pbyte bitlen, int tablebits, pword table)
+void maketable(int nchar, char* bitlen, int tablebits, string table)
 {
-    string count, weight, start;
-    pword p;
+    string count = 0, weight, start;
+    char* p;
     int i, k, len, ch, jutbits, avail, nextcode, mask;
 
     /*FOR i:=1 TO 16 DO
       count[i]:=0;*/
-    fillchar(count, sizeof(count), 0);
-    for (i = 0; i <= pred(intr, nchar); i++)
-        count[(*bitlen)[i]] += 1;
+    for (i = 0; i < nchar; i++)
+        count[bitlen[i]] += 1;
     start[1] = 0;
     for (i = 1; i <= 16; i++)
-        start[succ(int, i)] = (start[i] + (count[i] << (16 - i))) & 0xffff;
-    if (start[17] != 0)
+        start[i + 1] = (start[i] + (count[i] << (16 - i))) & 0xffff;
+    if (start[17] != 0) {
         /*HALT*//*RunError(1);*/
-    {
-        fehler = true;
+        error = true;
         exit;
     }
     jutbits = 16 - tablebits;
     for (i = 1; i <= tablebits; i++)
-    {
         start[i] = (start[i] & 0xffff) >> jutbits; weight[i] = 1 << (tablebits - i);
-    }
-    i = succ(int, tablebits);
-    while (i <= 16) {
+    i = tablebits + 1;
+    while (i <= 16)
         weight[i] = 1 << (16 - i); i += 1;
-    }
-    i = (start[succ(int, tablebits)] & 0xffff) >> jutbits;
-    if (i != 0)
-    {
+    i = (start[tablebits + 1] & 0xffff) >> jutbits;
+    if (i != 0) {
         k = 1 << tablebits;
         while (i != k) {
-            (*table)[i] = 0; i += 1;
+            table[i] = 0; i += 1;
         }
     }
     avail = nchar; mask = 1 << (15 - tablebits);
-    for (ch = 0; ch <= pred(int, nchar); ch++)
+    for (ch = 0; ch < nchar; ch++)
     {
-        len = (*bitlen)[ch];
+        len = bitlen[ch];
         if (len == 0)
             continue;
         k = (int)(start[len]);
         nextcode = k + weight[len];
         if (len <= tablebits)
         {
-            for (i = k; i <= pred(int, nextcode); i++)
-                (*table)[i] = ch;
+            for (i = k; i < nextcode; i++)
+                table[i] = ch;
         }
         else {
-            p = addr((*table)[(k & 0xffff) >> jutbits]); i = len - tablebits;
+            p = &table[(k & 0xffff) >> jutbits];
+            i = len - tablebits;
             while (i != 0) {
-                if ((*p)[0] == 0)
-                {
-                    right[avail] = 0; left[avail] = 0; (*p)[0] = avail; avail += 1;
+                if (p[0] == 0) {
+                    //right[avail] = 0; 
+                    //left[avail] = 0; 
+                    p[0] = avail;
+                    avail += 1;
                 }
-                if ((k & mask) != 0)
-                    p = addr(right[(*p)[0]]);
+                /*if ((k & mask) != 0)
+                    p = &right[p[0]];
                 else
-                    p = addr(left[(*p)[0]]);
+                    p = &left[p[0]];*/
                 k = (int)((k << 1) & 0xffff); i -= 1;
             }
-            (*p)[0] = ch;
+            p[0] = ch;
         }
-        start[len] = string(nextcode);
+        start[len] = nextcode;
     }
 }
 
 void readptlen(int nn, int nbit, int ispecial)
 {
     int i, c, n;
-    string mask;
+    int mask;
 
     n = getbits(nbit);
     if (n == 0)
     {
         c = getbits(nbit);
-        for (i = 0; i <= pred(int, nn); i++)
+        for (i = 0; i < nn; i++)
             ptlen[i] = 0;
         for (i = 0; i <= 255; i++)
             pttable[i] = c;
@@ -273,12 +238,12 @@ void readptlen(int nn, int nbit, int ispecial)
     else {
         i = 0;
         while (i < n) {
-            c = (bitbuf & $ffff) >> (bitbufsiz - 3);
+            c = (bitbuf & 0xffff) >> (bitbufsiz - 3);
             if (c == 7)
             {
                 mask = 1 << (bitbufsiz - 4);
                 while ((mask & bitbuf) != 0) {
-                    mask = (cardinal)(mask & $ffff) >> 1; c += 1;
+                    mask = mask & 0xffff >> 1; c += 1;
                 }
             }
             if (c < 7)
@@ -288,7 +253,7 @@ void readptlen(int nn, int nbit, int ispecial)
             ptlen[i] = c; i += 1;
             if (i == ispecial)
             {
-                c = pred(word, getbits(2));
+                c = getbits(2) - 1;
                 while (c >= 0) {
                     ptlen[i] = 0; i += 1; c -= 1;
                 }
@@ -297,8 +262,8 @@ void readptlen(int nn, int nbit, int ispecial)
         while (i < nn) {
             ptlen[i] = 0; i += 1;
         }
-        /* MakeTable(nn,@PtLen,8,@PtTable);*/
-        if (fehler)  exit;
+        maketable(nn, ptlen, 8, pttable);
+        if (error)  exit;
     }
 }
 
@@ -311,7 +276,7 @@ void readclen()
     if (n == 0)
     {
         c = getbits(cbit);
-        for (i = 0; i <= pred(int, nc); i++)
+        for (i = 0; i < nc; i++)
             clen[i] = 0;
         for (i = 0; i <= 4095; i++)
             ctable[i] = c;
@@ -324,11 +289,11 @@ void readclen()
             {
                 mask = 1 << (bitbufsiz - 9);
                 do {
-                    if ((bitbuf & mask) != 0)
+                    /*if ((bitbuf & mask) != 0)
                         c = right[c];
                     else
                         c = left[c];
-                    mask = (mask & 0xffff) >> 1;
+                    mask = (mask & 0xffff) >> 1;*/
                 } while (!(c < nt));
             }
             fillbuf(ptlen[c]);
@@ -350,81 +315,74 @@ void readclen()
         while (i < nc) {
             clen[i] = 0; i += 1;
         }
-        /*MakeTable(NC,@CLen,12,@CTable);*/
-        if (fehler)  exit;
+        maketable(nc, clen, 12, ctable);
+        if (error)  exit;
     }
 }
 
-string decodec()
+int decodec()
 {
-    word j, mask;
-
-    word decodec_result;
+    int j, mask;
     if (blocksize == 0)
     {
         blocksize = getbits(16);
         readptlen(nt, tbit, 3);
-        if (fehler)  exit;
+        if (error)  exit;
         readclen();
-        if (fehler)  exit;
+        if (error)  exit;
         readptlen(np, pbit, -1);
-        if (fehler)  exit;
+        if (error)  exit;
     }
     blocksize -= 1;
-    j = ctable[(cardinal)(bitbuf & $ffff) >> (bitbufsiz - 12)];
+    j = ctable[(bitbuf & 0xffff) >> (bitbufsiz - 12)];
     if (j >= nc)
     {
         mask = 1 << (bitbufsiz - 13);
-        do {
+        /*do {
             if ((bitbuf & mask) != 0)
                 j = right[j];
             else
                 j = left[j];
-            mask = (cardinal)(mask & $ffff) >> 1;
-        } while (!(j < nc));
+            mask = (mask & 0xffff) >> 1;
+        } while (!(j < nc));*/
     }
     fillbuf(clen[j]);
-    decodec_result = j;
-    return decodec_result;
+    return j;
 }
 
-string decodep()
+int decodep()
 {
-    string j, mask;
+    int j, mask;
 
     string decodep_result;
-    j = pttable[((bitbuf & 0xffff) >> (bitbufsiz - 8)];
+    j = pttable[((bitbuf & 0xffff) >> (bitbufsiz - 8))];
     if (j >= np)
     {
         mask = 1 << (bitbufsiz - 9);
-        do {
+        /*do {
             if ((bitbuf & mask) != 0)
                 j = right[j];
             else
                 j = left[j];
-            mask = (cardinal)(mask & $ffff) >> 1;
-        } while (!(j < np));
+            mask = (mask & 0xffff) >> 1;
+        } while (!(j < np));*/
     }
     fillbuf(ptlen[j]);
-    if (j != 0)
-    {
-        j -= 1; j = ((1 << j) & $ffff) + getbits(j);
+    if (j != 0) {
+        j -= 1;
+        j = ((1 << j) & 0xffff) + getbits(j);
     }
-    decodep_result = j;
-    return decodep_result;
+    return j;
 }
 
-/*declared as static vars*/
-string decode_i;
-int decode_j;
-
-void decodebuffer(string count, pbyte buffer)
+void decodebuffer(int count, char* buffer)
 {
-    string c, r;
+    int c, r;
 
     r = 0; decode_j -= 1;
     while (decode_j >= 0) {
-        (*buffer)[r] = (*buffer)[decode_i]; decode_i = succ(string, decode_i) & pred(int, dicsiz);
+        buffer[r] = buffer[decode_i];
+        decode_i = (decode_i + 1) & (dicsiz - 1);
         r += 1;
         if (r == count)
             exit;
@@ -434,20 +392,20 @@ void decodebuffer(string count, pbyte buffer)
         //Write(^m,Ofs(lesezeiger^)-Ofs(quelle):12,Ofs(schreibzeiger^)-Ofs(ziel)+r:12);
         //WriteLn(r:5,BitBuf:8,SubBitBuf:8);
         c = decodec();
-        if (fehler)  exit;
+        if (error)  exit;
         if (c <= ucharmax)
         {
-            (*buffer)[r] = c; r += 1;
+            buffer[r] = c; r += 1;
             if (r == count)
                 exit;
         }
         else {
             decode_j = c - (ucharmax + 1 - threshold);
-            decode_i = (r - decodep() - 1) & pred(int, dicsiz);
+            decode_i = (r - decodep() - 1) & (dicsiz - 1);
             decode_j -= 1;
             while (decode_j >= 0) {
-                (*buffer)[r] = (*buffer)[decode_i];
-                decode_i = succ(string, decode_i) & pred(int, dicsiz);
+                buffer[r] = buffer[decode_i];
+                decode_i = (decode_i + 1) & (dicsiz - 1);
                 r += 1;
                 if (r == count)
                     exit;
@@ -457,21 +415,25 @@ void decodebuffer(string count, pbyte buffer)
     }
 }
 
-bool unzip_lzh5x(void* quelle, void* ziel; long origsize, long compsize)
-/*PROCEDURE Decode;*/
-{
-    pbyte p;
+bool unzip_lzh5x(char source, char target, long origsize, long compsize1) {
+    char* p;
     long l;
-    word a;
-
-    boolean entpacke_lzh5_result;
+    int a;
+    bool entpacke_lzh5_result;
+    compsize = compsize1;
     error = false;
-    /*lesezeiger:=@quelle;*/
-    quellende = ptr(longint(lesezeiger) + compsize);
-    /*schreibzeiger:=@ziel;*/
+    r_pointer = &source;
+    *increase = (long(r_pointer) + compsize);
+    w_pointer = &target;
     /*Initialize decoder variables*/
-    getmem(p, dicsiz);
-    initgetbits(); blocksize = 0;
+    p = (char*)malloc(dicsiz);
+
+    bitbuf = 0;
+    subbitbuf = 0;
+    bitcount = 0;
+    fillbuf(bitbufsiz);
+
+    blocksize = 0;
     decode_j = 0;
     /*skip file size*/
     l = origsize; compsize -= 4;
@@ -482,12 +444,9 @@ bool unzip_lzh5x(void* quelle, void* ziel; long origsize, long compsize)
         else
             a = l;
         decodebuffer(a, p);
-        if (error)  
-            flush();
-        bwrite(&*p, a); 
+        b_write(p, a);
         l -= a;
     }
-    freemem(p, dicsiz);
+    free(p);
     return !error;
-    
 }

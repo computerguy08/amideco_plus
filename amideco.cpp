@@ -83,7 +83,7 @@ const string known_block_type[64] =
 
 ifstream fin;
 bool new_baseaddr_required, present, mix_used = false;
-char* src_rom, * unpacked, src_directory[255], src_name[255], src_extension[255],
+char* src_rom, * unpacked, src_directory[255], src_name[255], src_extension[255], result[32],
 rom[1048576], mixf0000[65535], char8[8];
 string zk, target_dir, filename;
 short int block_count, match = 0;
@@ -162,7 +162,6 @@ struct ibm_head ibm_header_const10 = { rom[oj & 0xff0000] };
 
 char* int2hex(long int number, char n)
 {
-    char result[32];
     int temp, i = 0;
     while (n != 0)
     {
@@ -396,16 +395,16 @@ void fsplit(string filename, char* dir, char* name, char* ext) {
         exit(3);
     }
     if (tmp) {
-        strcpy_s(dir, 255, copy(filename, 1, tmp).c_str());
-        strcpy_s(name, 255, copy(filename, tmp + 2, filename.length() - tmp - 5).c_str());
+        strcpy(dir, copy(filename, 1, tmp).c_str());
+        strcpy(name, copy(filename, tmp + 2, filename.length() - tmp - 5).c_str());
     }
     else {
-        strcpy_s(dir, 255, "");
-        strcpy_s(name, 255, copy(filename, 1, filename.length() - tmp - 4).c_str());
+        strcpy(dir, "");
+        strcpy(name, copy(filename, 1, filename.length() - tmp - 4).c_str());
     }
-    strcpy_s(ext, 255, copy(filename, filename.length() - 3, 4).c_str());
+    strcpy(ext, copy(filename, filename.length() - 3, 4).c_str());
     //cout << dir << " " << name << " " << ext << endl;
-    if (_stricmp(ext, ".BIN") && _stricmp(ext, ".ROM") && _stricmp(ext, ".AMI")) {
+    if (stricmp(ext, ".BIN") && stricmp(ext, ".ROM") && stricmp(ext, ".AMI")) {
         cout << "ERROR: invalid file extension!" << endl;
         exit(3);
     }
@@ -495,7 +494,7 @@ int main(int argc, const char* argv[])
                 logic_start = min_loadaddress;
                 //flush();
             }
-            filename = strcat_s(src_directory, 255, ami_flash_head.filename_of_next_file);
+            filename = strcat(src_directory, ami_flash_head.filename_of_next_file);
             open_file();
 
         }
@@ -554,7 +553,11 @@ int main(int argc, const char* argv[])
             cout << "Type: AMIBIOS uncompressed (<1993) and split" << endl;
             cout << "Core version: " << copy(&rom[rom_start + 0x90], 1, 6) << endl;
             cout << "POST string: " << &rom[rom_start + 0x78] << endl;
+
+
         }
+        filename = string(src_name) + erw;
+        save(&rom[rom_start], 2 * file_length);
         //cout << copy(&rom[rom_start], 1, 16);
         exit(0);
     }
@@ -884,7 +887,7 @@ int main(int argc, const char* argv[])
     while (strncmp(&rom[position_l], "Uª", 2) == 0) {
         l = rom[position_l + 2] * 512;
         filename = string(int2hex(position_l, 8)) + erw;
-        cout << ':' << int2hex(position_l, 8) << '  ' << int2hex(l, 4) << " ????:????  T=??" << string(16, ' ');
+        cout << ':' << int2hex(position_l, 8) << " " << int2hex(l, 4) << " ????:????  T=??" << string(16, ' ');
         save(&rom[position_l], l);
         cout << " => " << int2hex(l, 8) << " " << filename;
         position_l += l;
