@@ -358,7 +358,7 @@ void try_unpack(long int o)
 
 void open_file()
 {
-    fin.open(filename);
+    fin.open(filename, std::ios::binary);
     match++;
     if (!fin) {
         cout << "ERROR: cannot open file!" << endl;
@@ -445,6 +445,7 @@ int main(int argc, const char* argv[])
     logic_start = 0x100000;
     max_s = 0x100000;
     new_baseaddr_required = true;
+    /* == read files ==*/
     do {
         fin.seekg(0x00);
         fin.read(ami_flash_head.signature, sizeof(ami_flash_head));
@@ -531,7 +532,7 @@ int main(int argc, const char* argv[])
                         rom[i] = rom[logic_start + 3 * file_length];
                         rom[i + 1] = rom[logic_start + 2 * file_length];
                     }
-                    else {
+                    else { // known bug: value 0D gets copied twice
                         rom[i + 1] = rom[logic_start + 3 * file_length];
                         rom[i] = rom[logic_start + 2 * file_length];
                     }
@@ -545,29 +546,34 @@ int main(int argc, const char* argv[])
 
     } while (logic_start > 0x00);
     cout << "------------------------------" << endl;
-    /* == AMIBIOS prior to 1993 (uncompressed) == */
-
+    /* == start identifying the type of BIOS == */
+    /* == 1. AMIBIOS prior to 1993 (uncompressed) == */
     if (filecount == 1) {
         rom_start = max_s - file_length;
         if (copy(&rom[rom_start], 1, 16) == "0123AAAAMMMMIIII") {
-            cout << "Type: AMIBIOS uncompressed (<1993)" << endl;
-            cout << "Core version: " << copy(&rom[rom_start + 0x90], 1, 6) << endl;
-            cout << "POST string: " << &rom[rom_start + 0x78] << endl;
+            cout << "Type: AMIBIOS '90-'93 uncompressed" << endl;
+            if (copy(&rom[rom_start + 0x80], 1, 19) == "American Megatrends") {
+                cout << "Core version: " << copy(&rom[rom_start + 0x8090], 1, 6) << endl;
+                cout << "POST string: " << &rom[rom_start + 0x8078] << endl;
+            }
+            else {
+                cout << "Core version: " << copy(&rom[rom_start + 0x90], 1, 6) << endl;
+                cout << "POST string: " << &rom[rom_start + 0x78] << endl;
+            }
         }
         exit(0);
     }
     if (filecount == 2) {
         rom_start = max_s - 4 * file_length;
         if (copy(&rom[rom_start], 1, 16) == "0123AAAAMMMMIIII") {
-            cout << "Type: AMIBIOS uncompressed (<1993) and split" << endl;
+            cout << "Type: AMIBIOS '90-'93 uncompressed and split" << endl;
             cout << "Core version: " << copy(&rom[rom_start + 0x90], 1, 6) << endl;
             cout << "POST string: " << &rom[rom_start + 0x78] << endl;
-
 
         }
         filename = string(src_name) + erw;
         save(&rom[rom_start], 2 * file_length);
-        //cout << copy(&rom[rom_start], 1, 16);
+        cout << "File saved as: " << filename << endl;
         exit(0);
     }
 
